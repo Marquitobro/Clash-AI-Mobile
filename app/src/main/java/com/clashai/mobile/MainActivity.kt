@@ -105,8 +105,8 @@ class MainActivity : Activity() {
         button("+1", ownButtons) { ownElixir = (ownElixir + 1).coerceAtMost(10); refresh() }
         enemyElixirText = text(page, "ELIXIR RIVAL ESTIMADO: " + enemyElixir + " / 10", 18f, Color.WHITE, true)
         val enemyButtons = row(page)
-        button("RIVAL -1", enemyButtons) { enemyElixir = (enemyElixir - 1f).coerceAtLeast(0f); refresh() }
-        button("RIVAL +1", enemyButtons) { enemyElixir = (enemyElixir + 1f).coerceAtMost(10f); refresh() }
+        button("RIVAL -1", enemyButtons) { enemyElixir = (enemyElixir - 1f).coerceAtLeast(0f); saveEnemyState(); refresh() }
+        button("RIVAL +1", enemyButtons) { enemyElixir = (enemyElixir + 1f).coerceAtMost(10f); saveEnemyState(); refresh() }
         text(page, "Estimación automática: regenera 1 de elixir cada 2,8 s (2x cuando queda 1 minuto). Al registrar una carta rival, descuenta su coste conocido. No detecta jugadas por sí sola.", 12f, Color.LTGRAY, false)
 
         section(page, "CICLO DE TUS CARTAS")
@@ -238,6 +238,24 @@ class MainActivity : Activity() {
             .putString("own_cycle", ownCycle.joinToString("|||"))
             .putString("enemy_cycle", enemyCycle.joinToString("|||"))
             .apply()
+    }
+
+    private fun saveEnemyState() {
+        getSharedPreferences("clash_ai", MODE_PRIVATE).edit()
+            .putFloat("enemy_elixir_float", enemyElixir)
+            .putString("enemy_cycle", enemyCycle.joinToString("|||"))
+            .apply()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (::enemyElixirText.isInitialized) {
+            val prefs = getSharedPreferences("clash_ai", MODE_PRIVATE)
+            enemyElixir = prefs.getFloat("enemy_elixir_float", enemyElixir).coerceIn(0f, 10f)
+            enemyCycle.clear()
+            enemyCycle.addAll(prefs.getString("enemy_cycle", "").orEmpty().split("|||").filter { it.isNotBlank() }.take(8))
+            refresh()
+        }
     }
 
     private fun cycleSummary(cards: List<String>): String {
