@@ -2,6 +2,9 @@ package com.clashai.mobile
 
 import android.app.Activity
 import android.content.Intent
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.IntentFilter
 import android.media.projection.MediaProjectionManager
 import android.net.Uri
 import android.os.Build
@@ -19,6 +22,16 @@ import java.util.Locale
 class MainActivity : Activity() {
     companion object { private const val REQUEST_CAPTURE = 901 }
     private val handler = Handler(Looper.getMainLooper())
+    private val enemyUpdateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            val prefs = getSharedPreferences("clash_ai", MODE_PRIVATE)
+            enemyElixir = prefs.getFloat("enemy_elixir_float", enemyElixir).coerceIn(0f, 10f)
+            enemyCycle.clear()
+            enemyCycle.addAll(prefs.getString("enemy_cycle", "").orEmpty().split("|||").filter { it.isNotBlank() }.take(8))
+            refresh()
+        }
+    }
+
     private var remaining = 180
     private var running = false
     private var ownElixir = 5
@@ -150,6 +163,12 @@ class MainActivity : Activity() {
         }
         text(page, "Asistente de seguimiento manual. Las estimaciones dependen de los datos registrados; no modifica Clash Royale ni automatiza jugadas.", 12f, Color.GRAY, false)
         setContentView(root)
+        if (Build.VERSION.SDK_INT >= 33) {
+            registerReceiver(enemyUpdateReceiver, IntentFilter(CaptureOverlayService.ACTION_ENEMY_UPDATED), Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("DEPRECATION")
+            registerReceiver(enemyUpdateReceiver, IntentFilter(CaptureOverlayService.ACTION_ENEMY_UPDATED))
+        }
         refresh()
     }
 
@@ -234,6 +253,7 @@ class MainActivity : Activity() {
         adviceText.text = buildAdvice()
         getSharedPreferences("clash_ai", MODE_PRIVATE).edit()
             .putInt("own_elixir", ownElixir)
+            .putFloat("enemy_elixir_float", enemyElixir)
             .putFloat("enemy_elixir_float", enemyElixir)
             .putString("own_cycle", ownCycle.joinToString("|||"))
             .putString("enemy_cycle", enemyCycle.joinToString("|||"))
@@ -336,6 +356,7 @@ class MainActivity : Activity() {
 
     override fun onDestroy() {
         handler.removeCallbacks(tick)
+        unregisterReceiver(enemyUpdateReceiver)
         super.onDestroy()
     }
 }
