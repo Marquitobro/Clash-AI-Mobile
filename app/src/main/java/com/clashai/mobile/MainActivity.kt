@@ -16,7 +16,8 @@ import android.widget.*
 import android.text.InputType
 import java.util.Locale
 
-class MainActivity : Activity() {\n    companion object { private const val REQUEST_CAPTURE = 901 }
+class MainActivity : Activity() {
+    companion object { private const val REQUEST_CAPTURE = 901 }
     private val handler = Handler(Looper.getMainLooper())
     private var remaining = 180
     private var running = false
