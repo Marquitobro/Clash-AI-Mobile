@@ -21,6 +21,11 @@ import android.view.Gravity
 import android.view.WindowManager
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Button
+import android.widget.Spinner
+import android.widget.ArrayAdapter
+import android.widget.Toast
+import java.util.Locale
 
 class CaptureOverlayService : Service() {
     private var projection: MediaProjection? = null
@@ -30,6 +35,17 @@ class CaptureOverlayService : Service() {
     private var windowManager: WindowManager? = null
     private var overlayLabel: TextView? = null
     private var capturedFrames = 0L
+    private var enemyElixir = 5f
+    private lateinit var elixirLabel: TextView
+    private val cardCosts = linkedMapOf(
+        "Esqueletos" to 1, "Espíritu de hielo" to 1, "Descarga" to 2, "Tronco" to 2,
+        "Murciélagos" to 2, "Duendes" to 2, "Caballero" to 3, "Arqueras" to 3,
+        "Minero" to 3, "Pandilla de duendes" to 3, "Montapuercos" to 4,
+        "Mosquetera" to 4, "Valquiria" to 4, "Mini P.E.K.K.A." to 4,
+        "Bola de fuego" to 4, "Veneno" to 4, "Gigante" to 5, "Mago" to 5,
+        "Bruja" to 5, "Globo bombástico" to 5, "Cohete" to 6, "P.E.K.K.A." to 7,
+        "Sabueso de lava" to 7, "Gólem" to 8
+    )
     private var lastStatusUpdate = 0L
     private val mainHandler = Handler(Looper.getMainLooper())
     private val projectionCallback = object : MediaProjection.Callback() {
@@ -68,7 +84,7 @@ class CaptureOverlayService : Service() {
             return START_NOT_STICKY
         }
 
-        val manager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+        enemyElixir = getSharedPreferences("clash_ai", MODE_PRIVATE).getFloat("enemy_elixir_float", 5f).coerceIn(0f, 10f)\n        val manager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
         projection = manager.getMediaProjection(resultCode, data)
         projection?.registerCallback(projectionCallback, mainHandler)
         startCapture()
@@ -117,17 +133,52 @@ class CaptureOverlayService : Service() {
 
     private fun showOverlay() {
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
-        val label = TextView(this).apply {
-            text = "CLASH AI  •  CAPTURA ACTIVA\nAnalizador visual en preparación"
+        val prefs = getSharedPreferences("clash_ai", MODE_PRIVATE)
+        val title = TextView(this).apply {
+            text = "CLASH AI  •  ASISTENTE"
             textSize = 12f
             setTextColor(0xFFFFFFFF.toInt())
-            setPadding(18, 12, 18, 12)
-            setBackgroundColor(0xDD142238.toInt())
+            setPadding(10, 8, 10, 4)
         }
-        overlayLabel = label
+        elixirLabel = TextView(this).apply {
+            textSize = 17f
+            setTextColor(0xFF66E5FF.toInt())
+            setPadding(10, 4, 10, 8)
+        }
+        updateElixirLabel()
+        val spinner = Spinner(this).apply {
+            adapter = ArrayAdapter(this@CaptureOverlayService, android.R.layout.simple_spinner_dropdown_item, cardCosts.keys.toList())
+        }
+        val register = Button(this).apply {
+            text = "REGISTRAR CARTA RIVAL"
+            isAllCaps = false
+            setOnClickListener {
+                val card = spinner.selectedItem?.toString() ?: return@setOnClickListener
+                val cost = cardCosts[card] ?: return@setOnClickListener
+                enemyElixir = (enemyElixir - cost).coerceAtLeast(0f)
+                prefs.edit().putFloat("enemy_elixir_float", enemyElixir).apply()
+                val cycle = prefs.getString("enemy_cycle", "").orEmpty().split("|||").filter { it.isNotBlank() }.toMutableList()
+                cycle.add(0, card)
+                while (cycle.size > 8) cycle.removeAt(cycle.lastIndex)
+                prefs.edit().putString("enemy_cycle", cycle.joinToString("|||")).apply()
+                updateElixirLabel()
+                Toast.makeText(this@CaptureOverlayService, "$card: -$cost de elixir", Toast.LENGTH_SHORT).show()
+            }
+        }
+        val close = Button(this).apply {
+            text = "CERRAR ANALIZADOR"
+            isAllCaps = false
+            setOnClickListener { stopSelf() }
+        }
         overlay = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            addView(label)
+            setPadding(8, 6, 8, 6)
+            setBackgroundColor(0xEE142238.toInt())
+            addView(title)
+            addView(elixirLabel)
+            addView(spinner)
+            addView(register)
+            addView(close)
         }
         val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
@@ -139,7 +190,7 @@ class CaptureOverlayService : Service() {
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
             type,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.END
@@ -149,30 +200,9 @@ class CaptureOverlayService : Service() {
         windowManager?.addView(overlay, params)
     }
 
-    private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(CHANNEL_ID, "Clash AI captura", NotificationManager.IMPORTANCE_LOW)
-            (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).createNotificationChannel(channel)
+    private fun updateElixirLabel() {
+        if (::elixirLabel.isInitialized) {
+            elixirLabel.text = "ELIXIR RIVAL: " + String.format(Locale.getDefault(), "%.1f", enemyElixir) + " / 10"
         }
     }
 
-    override fun onDestroy() {
-        virtualDisplay?.release()
-        imageReader?.close()
-        projection?.unregisterCallback(projectionCallback)
-        projection?.stop()
-        overlay?.let { view -> windowManager?.removeView(view) }
-        overlay = null
-        overlayLabel = null
-        super.onDestroy()
-    }
-
-    override fun onBind(intent: Intent?): IBinder? = null
-
-    companion object {
-        const val EXTRA_RESULT_CODE = "capture_result_code"
-        const val EXTRA_DATA = "capture_data"
-        private const val CHANNEL_ID = "clash_ai_capture"
-        private const val NOTIFICATION_ID = 4102
-    }
-}
