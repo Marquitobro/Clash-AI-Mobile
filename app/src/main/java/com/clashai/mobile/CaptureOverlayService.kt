@@ -14,6 +14,8 @@ import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
 import android.os.Build
 import android.os.IBinder
+import android.os.Handler
+import android.os.Looper
 import android.util.DisplayMetrics
 import android.view.Gravity
 import android.view.WindowManager
@@ -26,6 +28,15 @@ class CaptureOverlayService : Service() {
     private var imageReader: ImageReader? = null
     private var overlay: LinearLayout? = null
     private var windowManager: WindowManager? = null
+    private var overlayLabel: TextView? = null
+    private var capturedFrames = 0L
+    private var lastStatusUpdate = 0L
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val projectionCallback = object : MediaProjection.Callback() {
+        override fun onStop() {
+            stopSelf()
+        }
+    }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         createNotificationChannel()
@@ -59,6 +70,7 @@ class CaptureOverlayService : Service() {
 
         val manager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
         projection = manager.getMediaProjection(resultCode, data)
+        projection?.registerCallback(projectionCallback, mainHandler)
         startCapture()
         showOverlay()
         return START_NOT_STICKY
@@ -83,9 +95,24 @@ class CaptureOverlayService : Service() {
             null
         )
         imageReader?.setOnImageAvailableListener({ reader ->
-            val image = reader.acquireLatestImage()
-            image?.close()
-        }, null)
+            val image = reader.acquireLatestImage() ?: return@setOnImageAvailableListener
+            try {
+                capturedFrames += 1
+                val now = System.currentTimeMillis()
+                if (now - lastStatusUpdate >= 1000L) {
+                    lastStatusUpdate = now
+                    val frameWidth = image.width
+                    val frameHeight = image.height
+                    overlayLabel?.text = "CLASH AI  •  CAPTURA ACTIVA\\n" +
+                        "Señal de pantalla: OK\\n" +
+                        "Resolución: ${frameWidth}×${frameHeight}\\n" +
+                        "Fotogramas recibidos: ${capturedFrames}\\n" +
+                        "Reconocimiento de cartas: pendiente"
+                }
+            } finally {
+                image.close()
+            }
+        }, mainHandler)
     }
 
     private fun showOverlay() {
@@ -97,6 +124,7 @@ class CaptureOverlayService : Service() {
             setPadding(18, 12, 18, 12)
             setBackgroundColor(0xDD142238.toInt())
         }
+        overlayLabel = label
         overlay = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             addView(label)
@@ -131,9 +159,11 @@ class CaptureOverlayService : Service() {
     override fun onDestroy() {
         virtualDisplay?.release()
         imageReader?.close()
+        projection?.unregisterCallback(projectionCallback)
         projection?.stop()
         overlay?.let { view -> windowManager?.removeView(view) }
         overlay = null
+        overlayLabel = null
         super.onDestroy()
     }
 
