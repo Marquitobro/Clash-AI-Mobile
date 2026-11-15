@@ -48,6 +48,8 @@ class MainActivity : Activity() {
         val prefs = getSharedPreferences("clash_ai", MODE_PRIVATE)
         ownElixir = prefs.getInt("own_elixir", 5).coerceIn(0, 10)
         enemyElixir = prefs.getInt("enemy_elixir", 5).coerceIn(0, 10)
+        ownCycle.addAll(prefs.getString("own_cycle", "")!!.split("|||").filter { it.isNotBlank() }.take(8))
+        enemyCycle.addAll(prefs.getString("enemy_cycle", "")!!.split("|||").filter { it.isNotBlank() }.take(8))
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -168,6 +170,8 @@ class MainActivity : Activity() {
         getSharedPreferences("clash_ai", MODE_PRIVATE).edit()
             .putInt("own_elixir", ownElixir)
             .putInt("enemy_elixir", enemyElixir)
+            .putString("own_cycle", ownCycle.joinToString("|||"))
+            .putString("enemy_cycle", enemyCycle.joinToString("|||"))
             .apply()
     }
 
