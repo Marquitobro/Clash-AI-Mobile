@@ -161,6 +161,7 @@ class CaptureOverlayService : Service() {
                 cycle.add(0, card)
                 while (cycle.size > 8) cycle.removeAt(cycle.lastIndex)
                 prefs.edit().putString("enemy_cycle", cycle.joinToString("|||")).apply()
+                sendBroadcast(Intent(ACTION_ENEMY_UPDATED).setPackage(packageName))
                 updateElixirLabel()
                 Toast.makeText(this@CaptureOverlayService, "$card: -$cost de elixir", Toast.LENGTH_SHORT).show()
             }
