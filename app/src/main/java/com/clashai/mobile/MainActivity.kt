@@ -67,7 +67,7 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         val prefs = getSharedPreferences("clash_ai", MODE_PRIVATE)
         ownElixir = prefs.getInt("own_elixir", 5).coerceIn(0, 10)
-        enemyElixir = prefs.getFloat("enemy_elixir", 5f).coerceIn(0f, 10f)
+        enemyElixir = prefs.getFloat("enemy_elixir_float", 5f).coerceIn(0f, 10f)
         ownCycle.addAll(prefs.getString("own_cycle", "")!!.split("|||").filter { it.isNotBlank() }.take(8))
         enemyCycle.addAll(prefs.getString("enemy_cycle", "")!!.split("|||").filter { it.isNotBlank() }.take(8))
 
@@ -234,7 +234,7 @@ class MainActivity : Activity() {
         adviceText.text = buildAdvice()
         getSharedPreferences("clash_ai", MODE_PRIVATE).edit()
             .putInt("own_elixir", ownElixir)
-            .putFloat("enemy_elixir", enemyElixir)
+            .putFloat("enemy_elixir_float", enemyElixir)
             .putString("own_cycle", ownCycle.joinToString("|||"))
             .putString("enemy_cycle", enemyCycle.joinToString("|||"))
             .apply()
