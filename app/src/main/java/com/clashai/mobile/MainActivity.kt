@@ -1,6 +1,11 @@
 package com.clashai.mobile
 
 import android.app.Activity
+import android.content.Intent
+import android.media.projection.MediaProjectionManager
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -11,7 +16,7 @@ import android.widget.*
 import android.text.InputType
 import java.util.Locale
 
-class MainActivity : Activity() {
+class MainActivity : Activity() {\n    companion object { private const val REQUEST_CAPTURE = 901 }
     private val handler = Handler(Looper.getMainLooper())
     private var remaining = 180
     private var running = false
@@ -65,7 +70,11 @@ class MainActivity : Activity() {
 
         text(page, "CLASH AI", 30f, Color.WHITE, true)
         text(page, "MOBILE  •  ASISTENTE COMPETITIVO", 12f, Color.CYAN, true)
-        text(page, "Herramientas de análisis manual para tus partidas.", 14f, Color.LTGRAY, false)
+        text(page, "Asistente visual para analizar tus partidas.", 14f, Color.LTGRAY, false)
+
+        section(page, "MODO AUTOMÁTICO")
+        button("ACTIVAR VENTANA FLOTANTE", page) { activateCaptureOverlay() }
+        text(page, "Android solicitará permiso para mostrar la ventana y capturar la pantalla mientras juegas. Esta versión prepara la captura y la ventana; todavía no reconoce cartas ni calcula elixir automáticamente.", 12f, Color.LTGRAY, false)
 
         section(page, "TIEMPO DE PARTIDA")
         timerText = text(page, "03:00", 42f, Color.WHITE, true)
@@ -118,6 +127,38 @@ class MainActivity : Activity() {
         text(page, "Asistente de seguimiento manual. Las estimaciones dependen de los datos registrados; no modifica Clash Royale ni automatiza jugadas.", 12f, Color.GRAY, false)
         setContentView(root)
         refresh()
+    }
+
+
+    private fun activateCaptureOverlay() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
+            val settingsIntent = Intent(
+                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                Uri.parse("package:" + packageName)
+            )
+            startActivity(settingsIntent)
+            Toast.makeText(this, "Autoriza mostrar sobre otras aplicaciones y vuelve a pulsar el botón.", Toast.LENGTH_LONG).show()
+            return
+        }
+        val manager = getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+        startActivityForResult(manager.createScreenCaptureIntent(), REQUEST_CAPTURE)
+    }
+
+    @Deprecated("Deprecated in Android, retained for broad device compatibility")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQUEST_CAPTURE && resultCode == RESULT_OK && data != null) {
+            val serviceIntent = Intent(this, CaptureOverlayService::class.java).apply {
+                putExtra(CaptureOverlayService.EXTRA_RESULT_CODE, resultCode)
+                putExtra(CaptureOverlayService.EXTRA_DATA, data)
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(serviceIntent)
+            } else {
+                startService(serviceIntent)
+            }
+            Toast.makeText(this, "Captura y ventana flotante activadas.", Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun toggleTimer() {
