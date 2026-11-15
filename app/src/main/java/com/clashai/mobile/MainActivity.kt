@@ -22,7 +22,7 @@ class MainActivity : Activity() {
     private var remaining = 180
     private var running = false
     private var ownElixir = 5
-    private var enemyElixir = 5
+    private var enemyElixir = 5f
     private val ownCycle = mutableListOf<String>()
     private val enemyCycle = mutableListOf<String>()
     private lateinit var timerText: TextView
@@ -34,6 +34,18 @@ class MainActivity : Activity() {
     private lateinit var adviceText: TextView
     private lateinit var startButton: Button
     private var lastTick = 0L
+    private val enemyCardCosts = mapOf(
+        "Caballero" to 3, "Gigante" to 5, "Montapuercos" to 4, "Mini P.E.K.K.A." to 4,
+        "Valquiria" to 4, "Bebé dragón" to 4, "Bombardero" to 2, "Arqueras" to 3,
+        "Mosquetera" to 4, "Mago" to 5, "Bruja" to 5, "Príncipe" to 5,
+        "Duendes" to 2, "Pandilla de duendes" to 3, "Esqueletos" to 1, "Ejército de esqueletos" to 3,
+        "Bola de fuego" to 4, "Descarga" to 2, "Flechas" to 3, "Tronco" to 2,
+        "Cohete" to 6, "Veneno" to 4, "Tesla" to 4, "Torre infernal" to 5,
+        "Megaesbirro" to 3, "Esbirros" to 3, "Horda de esbirros" to 5, "Murciélagos" to 2,
+        "Gólem" to 8, "Sabueso de lava" to 7, "Globo bombástico" to 5, "Minero" to 3,
+        "Leñador" to 4, "Mago eléctrico" to 4, "Fantasma real" to 3, "P.E.K.K.A." to 7,
+        "Cementerio" to 5, "Reclutas reales" to 7, "Puercos reales" to 5, "Barril de duendes" to 3
+    )
 
     private val tick = object : Runnable {
         override fun run() {
@@ -41,6 +53,8 @@ class MainActivity : Activity() {
             val now = System.currentTimeMillis()
             if (now - lastTick >= 1000) {
                 remaining -= 1
+                val regenPerSecond = if (remaining <= 60) 2f else 1f
+                enemyElixir = (enemyElixir + regenPerSecond / 2.8f).coerceAtMost(10f)
                 lastTick = now
                 if (remaining < -120) remaining = -120
                 refresh()
@@ -53,7 +67,7 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         val prefs = getSharedPreferences("clash_ai", MODE_PRIVATE)
         ownElixir = prefs.getInt("own_elixir", 5).coerceIn(0, 10)
-        enemyElixir = prefs.getInt("enemy_elixir", 5).coerceIn(0, 10)
+        enemyElixir = prefs.getFloat("enemy_elixir", 5f).coerceIn(0f, 10f)
         ownCycle.addAll(prefs.getString("own_cycle", "")!!.split("|||").filter { it.isNotBlank() }.take(8))
         enemyCycle.addAll(prefs.getString("enemy_cycle", "")!!.split("|||").filter { it.isNotBlank() }.take(8))
 
@@ -91,9 +105,9 @@ class MainActivity : Activity() {
         button("+1", ownButtons) { ownElixir = (ownElixir + 1).coerceAtMost(10); refresh() }
         enemyElixirText = text(page, "ELIXIR RIVAL ESTIMADO: " + enemyElixir + " / 10", 18f, Color.WHITE, true)
         val enemyButtons = row(page)
-        button("RIVAL -1", enemyButtons) { enemyElixir = (enemyElixir - 1).coerceAtLeast(0); refresh() }
-        button("RIVAL +1", enemyButtons) { enemyElixir = (enemyElixir + 1).coerceAtMost(10); refresh() }
-        text(page, "Ajusta manualmente el elixir cuando observes un gasto. No se lee automáticamente la pantalla del juego.", 12f, Color.LTGRAY, false)
+        button("RIVAL -1", enemyButtons) { enemyElixir = (enemyElixir - 1f).coerceAtLeast(0f); refresh() }
+        button("RIVAL +1", enemyButtons) { enemyElixir = (enemyElixir + 1f).coerceAtMost(10f); refresh() }
+        text(page, "Estimación automática: regenera 1 de elixir cada 2,8 s (2x cuando queda 1 minuto). Al registrar una carta rival, descuenta su coste conocido. No detecta jugadas por sí sola.", 12f, Color.LTGRAY, false)
 
         section(page, "CICLO DE TUS CARTAS")
         val ownInput = edit(page, "Nombre de carta que acabas de usar")
@@ -107,7 +121,16 @@ class MainActivity : Activity() {
         section(page, "CICLO DEL RIVAL")
         val enemyInput = edit(page, "Carta que acaba de usar el rival")
         button("REGISTRAR CARTA DEL RIVAL", page) {
-            addCard(enemyCycle, enemyInput.text.toString())
+            val playedCard = enemyInput.text.toString().trim()
+            addCard(enemyCycle, playedCard)
+            val cost = enemyCardCosts[playedCard.lowercase(Locale.ROOT)]
+                ?: enemyCardCosts.entries.firstOrNull { it.key.lowercase(Locale.ROOT) == playedCard.lowercase(Locale.ROOT) }?.value
+            if (cost != null) {
+                enemyElixir = (enemyElixir - cost).coerceAtLeast(0f)
+                Toast.makeText(this, "Descontados $cost de elixir", Toast.LENGTH_SHORT).show()
+            } else if (playedCard.isNotBlank()) {
+                Toast.makeText(this, "Carta registrada; coste no reconocido, no se descontó elixir.", Toast.LENGTH_LONG).show()
+            }
             enemyInput.setText("")
             refresh()
         }
@@ -120,7 +143,7 @@ class MainActivity : Activity() {
         button("NUEVA PARTIDA (BORRAR REGISTROS)", page) {
             resetTimer()
             ownElixir = 5
-            enemyElixir = 5
+            enemyElixir = 5f
             ownCycle.clear()
             enemyCycle.clear()
             refresh()
@@ -205,13 +228,13 @@ class MainActivity : Activity() {
             else -> "PARTIDA FINALIZADA"
         }
         ownElixirText.text = "TU ELIXIR: " + ownElixir + " / 10"
-        enemyElixirText.text = "ELIXIR RIVAL (ESTIMADO): " + enemyElixir + " / 10"
+        enemyElixirText.text = "ELIXIR RIVAL ESTIMADO: " + String.format(Locale.getDefault(), "%.1f", enemyElixir) + " / 10"
         ownCycleText.text = cycleSummary(ownCycle)
         enemyCycleText.text = cycleSummary(enemyCycle)
         adviceText.text = buildAdvice()
         getSharedPreferences("clash_ai", MODE_PRIVATE).edit()
             .putInt("own_elixir", ownElixir)
-            .putInt("enemy_elixir", enemyElixir)
+            .putFloat("enemy_elixir", enemyElixir)
             .putString("own_cycle", ownCycle.joinToString("|||"))
             .putString("enemy_cycle", enemyCycle.joinToString("|||"))
             .apply()
@@ -231,8 +254,8 @@ class MainActivity : Activity() {
             else -> "Partida terminada. Revisa tus intercambios de elixir y cartas."
         }
         val elixirAdvice = when {
-            ownElixir >= 8 && enemyElixir <= 4 -> " Tienes ventaja estimada: considera presionar sin comprometer toda tu defensa."
-            ownElixir <= 3 && enemyElixir >= 7 -> " El rival podría presionar: juega defensivamente y recupera elixir."
+            ownElixir >= 8 && enemyElixir <= 4f -> " Tienes ventaja estimada: considera presionar sin comprometer toda tu defensa."
+            ownElixir <= 3 && enemyElixir >= 7f -> " El rival podría presionar: juega defensivamente y recupera elixir."
             else -> " Conserva elixir para responder a la condición de victoria rival."
         }
         val cycleAdvice = if (enemyCycle.size >= 4) {
